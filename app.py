@@ -44,24 +44,23 @@ if check_password():
         col_glosa = [c for c in df_pagos.columns if 'especifique' in c.lower() or ('detalle' in c.lower() and c != col_cat)][0]
 
         df_pagos[col_monto] = pd.to_numeric(df_pagos[col_monto], errors='coerce').fillna(0).astype(int)
+        
+        # --- LIMPIEZA PROFUNDA ---
         df_pagos[col_nombre] = df_pagos[col_nombre].str.strip()
         df_nomina['Nombre'] = df_nomina['Nombre'].str.strip()
+        # Unificamos glosas: Todo a Mayúsculas y sin espacios locos
+        df_pagos[col_glosa] = df_pagos[col_glosa].str.strip().str.upper()
 
-        # --- CABECERA AJUSTADA PARA CELULARES ---
-        # Saldo en grande
+        # Cabecera
         ingresos = df_pagos[df_pagos[col_tipo].str.contains('Ingreso', case=False)][col_monto].sum()
         egresos = df_pagos[df_pagos[col_tipo].str.contains('Egreso', case=False)][col_monto].sum()
         st.metric("🏦 Saldo Actual en Caja", f"${(ingresos - egresos):,.0f}")
 
-        # Informaciones en un recuadro que ajusta el texto
         if not df_avisos.empty:
             mensaje_actual = df_avisos.iloc[0, 0]
             st.info(f"📢 **INFORMACIÓN IMPORTANTE:** \n\n {mensaje_actual}")
-        else:
-            st.info("📢 Sin avisos vigentes por ahora.")
 
         st.markdown("---")
-
         t1, t2, t3, t4, t5, tab_mora = st.tabs(["📅 Cuotas", "🛠️ Gastos", "🎉 Eventos", "🤝 Solidaria", "📎 Otros", "🚨 PAGOS"])
 
         def mostrar_datos(palabra, obj_tab):
@@ -75,7 +74,7 @@ if check_password():
         with tab_mora:
             st.error("### 🚨 CONTROL DE PAGOS")
             
-            # Cálculo de meses vencidos
+            # Cálculo devengo
             hoy = datetime.now()
             mes_actual = hoy.month
             dia_actual = hoy.day
@@ -102,11 +101,17 @@ if check_password():
             st.markdown("---")
             st.subheader("🎉 Campañas 🐰🥕")
             ev_df = df_pagos[df_pagos[col_cat].str.contains("Event", case=False, na=False)]
+            
             if not ev_df.empty:
-                for ev_nom in [g for g in ev_df[col_glosa].unique() if g != ""]:
+                # UNIFICAMOS LAS GLOSAS PARA EL REPORTE
+                campanas_unicas = sorted([g for g in ev_df[col_glosa].unique() if g != ""])
+                
+                for ev_nom in campanas_unicas:
                     st.write(f"🔍 **Campaña: {ev_nom}**")
-                    pagaron = ev_df[ev_df[col_glosa].str.contains(ev_nom, case=False, na=False)][col_nombre].unique()
+                    # Buscamos a los que pagaron esta campaña (sin importar mayúsculas)
+                    pagaron = ev_df[ev_df[col_glosa] == ev_nom][col_nombre].unique()
                     faltan = [al for al in lista_total if al not in pagaron]
+                    
                     if faltan:
                         for deudor in faltan: st.markdown(f"🚨 **{deudor}** - PENDIENTE")
                     else: st.success(f"👏 ¡Todos cumplieron!")
