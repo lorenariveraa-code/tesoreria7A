@@ -24,11 +24,10 @@ def check_password():
     return True
 
 if check_password():
-    st.title("📊 Control de Caja 7° A - Villa Alegre")
+    st.title("📊 Control de Caja 7° A")
     st.sidebar.button("Cerrar Sesión", on_click=lambda: st.session_state.update({"autenticado": False}))
     
     sheet_id = "1GjmhdSc-Aw8HUdVW2Xuy5DOtcBxUnos1C02_ARFGWVM"
-    # URLs para las 3 hojas
     url_pagos = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet=Respuestas%20de%20formulario%201"
     url_nomina = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet=Nomina"
     url_avisos = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet=Avisos"
@@ -47,27 +46,23 @@ if check_password():
         df_pagos[col_monto] = pd.to_numeric(df_pagos[col_monto], errors='coerce').fillna(0).astype(int)
         df_pagos[col_nombre] = df_pagos[col_nombre].str.strip()
         df_nomina['Nombre'] = df_nomina['Nombre'].str.strip()
-        df_pagos[col_glosa] = df_pagos[col_glosa].str.strip().str.capitalize()
 
-        # --- CABECERA (SALDO E INFORMACIONES) ---
-        col_info_1, col_info_2 = st.columns(2)
-        
-        with col_info_1:
-            ingresos = df_pagos[df_pagos[col_tipo].str.contains('Ingreso', case=False)][col_monto].sum()
-            egresos = df_pagos[df_pagos[col_tipo].str.contains('Egreso', case=False)][col_monto].sum()
-            st.metric("🏦 Saldo en Caja", f"${(ingresos - egresos):,.0f}")
+        # --- CABECERA AJUSTADA PARA CELULARES ---
+        # Saldo en grande
+        ingresos = df_pagos[df_pagos[col_tipo].str.contains('Ingreso', case=False)][col_monto].sum()
+        egresos = df_pagos[df_pagos[col_tipo].str.contains('Egreso', case=False)][col_monto].sum()
+        st.metric("🏦 Saldo Actual en Caja", f"${(ingresos - egresos):,.0f}")
 
-        with col_info_2:
-            # Lee el primer mensaje de la hoja 'Avisos'
-            if not df_avisos.empty:
-                mensaje_actual = df_avisos.iloc[0, 0] # Toma la celda A2 (primera fila de datos)
-                st.metric("📢 Informaciones", str(mensaje_actual))
-            else:
-                st.metric("📢 Informaciones", "Sin avisos vigentes")
+        # Informaciones en un recuadro que ajusta el texto
+        if not df_avisos.empty:
+            mensaje_actual = df_avisos.iloc[0, 0]
+            st.info(f"📢 **INFORMACIÓN IMPORTANTE:** \n\n {mensaje_actual}")
+        else:
+            st.info("📢 Sin avisos vigentes por ahora.")
 
         st.markdown("---")
 
-        t1, t2, t3, t4, t5, tab_mora = st.tabs(["📅 Cuotas", "🛠️ Gastos", "🎉 Eventos", "🤝 Solidaria", "📎 Otros", "🚨 ESTADO DE PAGOS"])
+        t1, t2, t3, t4, t5, tab_mora = st.tabs(["📅 Cuotas", "🛠️ Gastos", "🎉 Eventos", "🤝 Solidaria", "📎 Otros", "🚨 PAGOS"])
 
         def mostrar_datos(palabra, obj_tab):
             with obj_tab:
@@ -78,10 +73,8 @@ if check_password():
         mostrar_datos("Cuota", t1); mostrar_datos("Operat", t2); mostrar_datos("Event", t3); mostrar_datos("Solidar", t4); mostrar_datos("Otros", t5)
 
         with tab_mora:
-            st.error("### 🚨 CONTROL DE PAGOS PENDIENTES")
-            with st.expander("ℹ️ ¿Cómo funciona este sistema?"):
-                st.write("Cuota anual de $30.000 (10 cuotas de $3.000, vencen el día 5 de cada mes).")
-
+            st.error("### 🚨 CONTROL DE PAGOS")
+            
             # Cálculo de meses vencidos
             hoy = datetime.now()
             mes_actual = hoy.month
@@ -93,32 +86,32 @@ if check_password():
                 if dia_actual >= 5: meses_vencidos += 1 
             
             deuda_exigible = meses_vencidos * 3000
-            st.info(f"📅 **Monto exigible a la fecha:** ${deuda_exigible:,.0f}")
+            st.info(f"📅 **Monto exigible a la fecha:** ${deuda_exigible:,.0f} ({meses_vencidos} cuotas)")
             
             lista_total = sorted(df_nomina['Nombre'].tolist())
             resumen_cuota = df_pagos[df_pagos[col_cat].str.contains("Cuota", case=False)].groupby(col_nombre)[col_monto].sum()
 
             for a in lista_total:
                 p = resumen_cuota.get(a, 0)
-                if p >= 30000: st.markdown(f"🌟 **{a}** - PAGADO EL AÑO COMPLETO")
+                if p >= 30000: st.markdown(f"🌟 **{a}** - PAGADO COMPLETO")
                 elif p >= deuda_exigible and deuda_exigible > 0: st.markdown(f"✅ **{a}** - AL DÍA")
                 elif p > 0: st.markdown(f"⌛ **{a}** - PENDIENTE (Faltan: ${deuda_exigible - p:,.0f})")
                 elif deuda_exigible > 0: st.markdown(f"🚨 **{a}** - PENDIENTE (Debe: ${deuda_exigible:,.0f})")
                 else: st.markdown(f"✅ **{a}** - AL DÍA")
 
             st.markdown("---")
-            st.subheader("🎉 Cumplimiento de Campañas")
+            st.subheader("🎉 Campañas 🐰🥕")
             ev_df = df_pagos[df_pagos[col_cat].str.contains("Event", case=False, na=False)]
             if not ev_df.empty:
                 for ev_nom in [g for g in ev_df[col_glosa].unique() if g != ""]:
-                    st.markdown(f"🔍 **Campaña: {ev_nom}**")
-                    pagaron = ev_df[ev_df[col_glosa] == ev_nom][col_nombre].unique()
+                    st.write(f"🔍 **Campaña: {ev_nom}**")
+                    pagaron = ev_df[ev_df[col_glosa].str.contains(ev_nom, case=False, na=False)][col_nombre].unique()
                     faltan = [al for al in lista_total if al not in pagaron]
                     if faltan:
-                        for deudor in faltan: st.markdown(f"🚨 **{deudor}** - PENDIENTE ({ev_nom})")
-                    else: st.success(f"👏 ¡Todo el curso cumplió con {ev_nom}!")
+                        for deudor in faltan: st.markdown(f"🚨 **{deudor}** - PENDIENTE")
+                    else: st.success(f"👏 ¡Todos cumplieron!")
 
         st.link_button("📂 Ver Galería de Boletas", "https://drive.google.com/")
 
     except Exception as e:
-        st.error(f"Error al cargar avisos o datos. Asegúrate de que la hoja 'Avisos' exista. ({e})")
+        st.error(f"Error: {e}")
