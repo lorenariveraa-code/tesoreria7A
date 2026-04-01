@@ -45,10 +45,9 @@ if check_password():
 
         df_pagos[col_monto] = pd.to_numeric(df_pagos[col_monto], errors='coerce').fillna(0).astype(int)
         
-        # --- LIMPIEZA PROFUNDA ---
+        # Limpieza de datos
         df_pagos[col_nombre] = df_pagos[col_nombre].str.strip()
         df_nomina['Nombre'] = df_nomina['Nombre'].str.strip()
-        # Unificamos glosas: Todo a Mayúsculas y sin espacios locos
         df_pagos[col_glosa] = df_pagos[col_glosa].str.strip().str.upper()
 
         # Cabecera
@@ -74,6 +73,13 @@ if check_password():
         with tab_mora:
             st.error("### 🚨 CONTROL DE PAGOS")
             
+            # NOTA EXPLICATIVA RECUPERADA
+            with st.expander("ℹ️ ¿Cómo funciona este sistema de cuotas?"):
+                st.write("""
+                La cuota anual de **$30.000** se divide en **10 cuotas mensuales de $3.000** (de marzo a diciembre).
+                Cada cuota vence el **día 5 de cada mes**. El sistema calcula automáticamente el monto que debería estar pagado según la fecha de hoy.
+                """)
+
             # Cálculo devengo
             hoy = datetime.now()
             mes_actual = hoy.month
@@ -103,15 +109,11 @@ if check_password():
             ev_df = df_pagos[df_pagos[col_cat].str.contains("Event", case=False, na=False)]
             
             if not ev_df.empty:
-                # UNIFICAMOS LAS GLOSAS PARA EL REPORTE
                 campanas_unicas = sorted([g for g in ev_df[col_glosa].unique() if g != ""])
-                
                 for ev_nom in campanas_unicas:
                     st.write(f"🔍 **Campaña: {ev_nom}**")
-                    # Buscamos a los que pagaron esta campaña (sin importar mayúsculas)
                     pagaron = ev_df[ev_df[col_glosa] == ev_nom][col_nombre].unique()
                     faltan = [al for al in lista_total if al not in pagaron]
-                    
                     if faltan:
                         for deudor in faltan: st.markdown(f"🚨 **{deudor}** - PENDIENTE")
                     else: st.success(f"👏 ¡Todos cumplieron!")
