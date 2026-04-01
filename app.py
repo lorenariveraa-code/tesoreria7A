@@ -19,7 +19,8 @@ def check_password():
             if user == USUARIO_CORRECTO and password == CLAVE_CORRECTA:
                 st.session_state["autenticado"] = True
                 st.rerun()
-            else: st.error("⚠️ Credenciales incorrectas")
+            else: 
+                st.error("⚠️ Credenciales incorrectas")
         return False
     return True
 
@@ -32,48 +33,53 @@ if check_password():
     url_nomina = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet=Nomina"
 
     try:
+        # Carga de datos
         df_pagos = pd.read_csv(url_pagos).fillna("")
         df_nomina = pd.read_csv(url_nomina).fillna("")
         
+        # Identificación de columnas
         col_monto = [c for c in df_pagos.columns if 'monto' in c.lower()][0]
         col_tipo = [c for c in df_pagos.columns if 'tipo' in c.lower()][0]
         col_cat = [c for c in df_pagos.columns if 'detalle' in c.lower() or 'evento' in c.lower() or 'categor' in c.lower()][0]
         col_nombre = [c for c in df_pagos.columns if 'nombre' in c.lower()][0]
         col_glosa = [c for c in df_pagos.columns if 'especifique' in c.lower() or ('detalle' in c.lower() and c != col_cat)][0]
 
+        # Limpieza de datos
         df_pagos[col_monto] = pd.to_numeric(df_pagos[col_monto], errors='coerce').fillna(0).astype(int)
         df_pagos[col_nombre] = df_pagos[col_nombre].str.strip()
         df_nomina['Nombre'] = df_nomina['Nombre'].str.strip()
         df_pagos[col_glosa] = df_pagos[col_glosa].str.strip().str.capitalize()
 
-        st.metric("🏦 Saldo en Caja", f"${(df_pagos[df_pagos[col_tipo].str.contains('Ingreso', case=False)][col_monto].sum() - df_pagos[df_pagos[col_tipo].str.contains('Egreso', case=False)][col_monto].sum()):,.0f}")
+        # Saldo General
+        ingresos_totales = df_pagos[df_pagos[col_tipo].str.contains('Ingreso', case=False)][col_monto].sum()
+        egresos_totales = df_pagos[df_pagos[col_tipo].str.contains('Egreso', case=False)][col_monto].sum()
+        st.metric("🏦 Saldo en Caja", f"${(ingresos_totales - egresos_totales):,.0f}")
         st.markdown("---")
 
+        # Pestañas
         t1, t2, t3, t4, t5, tab_mora = st.tabs(["📅 Cuotas", "🛠️ Gastos", "🎉 Eventos", "🤝 Solidaria", "📎 Otros", "🚨 ESTADO DE PAGOS"])
 
         def mostrar_datos(palabra, obj_tab):
             with obj_tab:
                 mask = df_pagos[col_cat].str.contains(palabra, case=False, na=False)
-                if not df_pagos[mask].empty: st.dataframe(df_pagos[mask], hide_index=True)
-                else: st.info(f"Sin registros")
+                sub_df = df_pagos[mask]
+                if not sub_df.empty: 
+                    st.dataframe(sub_df, hide_index=True)
+                else: 
+                    st.info(f"Sin registros de {palabra}")
 
-        mostrar_datos("Cuota", t1); mostrar_datos("Operat", t2); mostrar_datos("Event", t3); mostrar_datos("Solidar", t4)
+        mostrar_datos("Cuota", t1)
+        mostrar_datos("Operat", t2)
+        mostrar_datos("Event", t3)
+        mostrar_datos("Solidar", t4)
 
         with tab_mora:
             st.error("### 🚨 CONTROL DE PAGOS PENDIENTES")
             
-            # --- EXPLICACIÓN DEL SISTEMA ---
-            with st.expander("ℹ️ ¿Cómo funciona este sistema de cobro? (Haz clic para leer)"):
-                st.write("""
-                Para facilitar el pago, la cuota anual de **$30.000** se ha dividido en **10 cuotas mensuales de $3.000** (de marzo a diciembre).
-                
-                * Cada cuota vence el **día 5 de cada mes**.
-                * El sistema calcula automáticamente cuántas cuotas han vencido a la fecha de hoy.
-                * Si has pagado más del total vencido, aparecerás **Al Día**.
-                * Si has pagado el total de los $30.000, aparecerás con una **Estrella** de agradecimiento.
-                """)
+            with st.expander("ℹ️ ¿Cómo funciona este sistema?"):
+                st.write("Cuota anual de $30.000 dividida en 10 cuotas de $3.000 (vencen el día 5 de cada mes).")
 
-            # --- CÁLCULO DE CUOTAS VENCIDAS ---
+            # Cálculo de meses vencidos (Marzo a Diciembre)
             hoy = datetime.now()
             mes_actual = hoy.month
             dia_actual = hoy.day
@@ -84,27 +90,34 @@ if check_password():
                 meses_vencidos = mes_actual - 3 
                 if dia_actual >= 5: meses_vencidos += 1 
             
-            cuota_mensual = 3000
-            deuda_exigible = meses_vencidos * cuota_mensual
-            
-            st.info(f"📅 **Corte al día de hoy:** {meses_vencidos} meses devengados (Monto exigible: ${deuda_exigible:,.0f})")
+            deuda_exigible = meses_vencidos * 3000
+            st.info(f"📅 **Monto exigible a la fecha:** ${deuda_exigible:,.0f} ({meses_vencidos} cuotas)")
             
             lista_total = sorted(df_nomina['Nombre'].tolist())
-            pagos_cuota = df_pagos[df_pagos[col_cat].str.contains("Cuota", case=False, na=False)]
-            resumen_cuota = pagos_cuota.groupby(col_nombre)[col_monto].sum()
+            resumen_cuota = df_pagos[df_pagos[col_cat].str.contains("Cuota", case=False)].groupby(col_nombre)[col_monto].sum()
 
             for a in lista_total:
                 p = resumen_cuota.get(a, 0)
-                if p >= 30000:
-                    st.markdown(f"🌟 **{a}** - PAGADO EL AÑO COMPLETO")
-                elif p >= deuda_exigible and deuda_exigible > 0:
-                    st.markdown(f"✅ **{a}** - AL DÍA (Pagado: ${p:,.0f})")
-                elif p > 0:
-                    st.markdown(f"⌛ **{a}** - PENDIENTE (Debe: ${deuda_exigible - p:,.0f} de lo vencido)")
-                elif deuda_exigible > 0:
-                    st.markdown(f"🚨 **{a}** - PENDIENTE (Debe: ${deuda_exigible:,.0f} a la fecha)")
-                else:
-                    st.markdown(f"✅ **{a}** - Sin deudas vencidas")
+                if p >= 30000: st.markdown(f"🌟 **{a}** - PAGADO EL AÑO COMPLETO")
+                elif p >= deuda_exigible and deuda_exigible > 0: st.markdown(f"✅ **{a}** - AL DÍA (${p:,.0f})")
+                elif p > 0: st.markdown(f"⌛ **{a}** - PENDIENTE (Faltan: ${deuda_exigible - p:,.0f})")
+                elif deuda_exigible > 0: st.markdown(f"🚨 **{a}** - PENDIENTE (Debe: ${deuda_exigible:,.0f})")
+                else: st.markdown(f"✅ **{a}** - Sin deudas")
 
             st.markdown("---")
-            # SECCIÓN CAMP
+            st.subheader("🎉 Cumplimiento de Campañas")
+            ev_df = df_pagos[df_pagos[col_cat].str.contains("Event", case=False, na=False)]
+            if not ev_df.empty:
+                for ev_nom in [g for g in ev_df[col_glosa].unique() if g != ""]:
+                    st.markdown(f"🔍 **Campaña: {ev_nom}**")
+                    pagaron = ev_df[ev_df[col_glosa] == ev_nom][col_nombre].unique()
+                    faltan = [al for al in lista_total if al not in pagaron]
+                    if faltan:
+                        for deudor in faltan: st.markdown(f"🚨 **{deudor}** - PENDIENTE ({ev_nom})")
+                    else: st.success(f"👏 ¡Todo el curso cumplió con {ev_nom}!")
+
+        st.markdown("---")
+        st.link_button("📂 Ver Galería de Boletas", "https://drive.google.com/")
+
+    except Exception as e:
+        st.error(f"Error en la conexión con la planilla: {e}")
