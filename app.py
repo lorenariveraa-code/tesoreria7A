@@ -93,4 +93,8 @@ if check_password():
                         for deudor in faltan:
                             st.markdown(f"🚨 **{deudor}** - PENDIENTE (**{ev_nom}**)")
                     else: st.success(f"👏 Todo el curso cumplió con {ev_nom}!")
-            else: st.info("No hay
+            else: st.info("No hay campañas aún.")
+
+        st.link_button("📂 Ver Galería de Boletas", "https://drive.google.com/")
+
+    except Exception as e: st.error(f"Error: {e}")
