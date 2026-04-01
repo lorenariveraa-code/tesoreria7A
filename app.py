@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-# 1. Configuración General
+# 1. Configuración de la App
 st.set_page_config(page_title="Tesorería 7° A", page_icon="📊", layout="wide")
 st.title("📊 Control de Caja 7° A - Villa Alegre")
 st.markdown("---")
@@ -23,7 +23,7 @@ try:
     
     df_pagos[col_monto] = pd.to_numeric(df_pagos[col_monto], errors='coerce').fillna(0).astype(int)
 
-    # 3. Resumen Financiero
+    # 3. Resumen de Saldo
     ingresos = df_pagos[df_pagos[col_tipo].str.contains('Ingreso', case=False, na=False)][col_monto].sum()
     egresos = df_pagos[df_pagos[col_tipo].str.contains('Egreso', case=False, na=False)][col_monto].sum()
     st.metric("🏦 Saldo Disponible en Caja", f"${(ingresos - egresos):,.0f}")
@@ -35,54 +35,60 @@ try:
     def mostrar_datos(palabra, obj_tab):
         with obj_tab:
             mask = df_pagos[col_cat].str.contains(palabra, case=False, na=False)
-            if not df_pagos[mask].empty: st.dataframe(df_pagos[mask], hide_index=True)
-            else: st.info(f"Sin registros de {palabra}")
+            if not df_pagos[mask].empty: 
+                st.dataframe(df_pagos[mask], hide_index=True)
+            else: 
+                st.info(f"Sin registros de {palabra}")
 
     mostrar_datos("Cuota", t1)
     mostrar_datos("Operat", t2)
     mostrar_datos("Event", t3)
     mostrar_datos("Solidar", t4)
 
-    # --- PESTAÑA DE COBRANZA INTELIGENTE ---
+    # --- PESTAÑA DE COBRANZA CON ICONOS SOLICITADOS ---
     with tab_mora:
-        st.error("### 🚨 CONTROL DE CUMPLIMIENTO")
+        st.error("### 🚨 ESTADO DE CUMPLIMIENTO POR ALUMNO")
         lista_total = sorted(df_nomina['Nombre'].tolist())
         
         # SECCIÓN A: CUOTA DE CURSO ($30.000)
-        st.subheader("📌 Cuota de Curso (Meta $30.000)")
+        st.subheader("📌 Cuota de Curso (Total: $30.000)")
         pagos_cuota = df_pagos[df_pagos[col_cat].str.contains("Cuota", case=False, na=False)]
         resumen_cuota = pagos_cuota.groupby(col_nombre)[col_monto].sum()
 
         for alumno in lista_total:
             pagado = resumen_cuota.get(alumno, 0)
-            if pagado >= 30000: st.markdown(f"✅ **{alumno}** - Al día")
-            elif pagado > 0: st.markdown(f"⚠️ **{alumno}** - Parcial (${pagado:,.0f} de $30.000)")
-            else: st.markdown(f"🚨 **{alumno}** - PENDIENTE ($0)")
+            faltante = 30000 - pagado
+            
+            if pagado >= 30000: 
+                st.markdown(f"✅ **{alumno}** - AL DÍA")
+            elif pagado > 0: 
+                st.markdown(f"⌛ **{alumno}** - PAGO PARCIAL (Faltan: **${faltante:,.0f}**)")
+            else: 
+                st.markdown(f"🚨 **{alumno}** - DEBE EL TOTAL (**$30.000**)")
 
         st.markdown("---")
 
-        # SECCIÓN B: EVENTOS Y CAMPAÑAS (Pascua, etc.)
-        st.subheader("🎉 Cumplimiento de Campañas")
-        # Buscamos si hay registros en la categoría 'Eventos'
+        # SECCIÓN B: EVENTOS Y CAMPAÑAS
+        st.subheader("🎉 Cumplimiento de Campañas y Eventos")
         eventos_df = df_pagos[df_pagos[col_cat].str.contains("Event", case=False, na=False)]
         
         if not eventos_df.empty:
-            # Vemos qué eventos existen (ej: 'Cuota Pascua')
             nombres_eventos = eventos_df[col_cat].unique()
             for ev in nombres_eventos:
                 st.write(f"**Campaña: {ev}**")
                 pagaron_ev = eventos_df[eventos_df[col_cat] == ev][col_nombre].unique()
-                
-                # Quienes faltan para ESTA campaña específica
                 faltan_ev = [a for a in lista_total if a not in pagaron_ev]
+                
                 if faltan_ev:
-                    for f in faltan_ev: st.markdown(f"📢 **{f}** - No ha pagado {ev}")
-                else: st.success(f"👏 ¡Todos cumplieron con {ev}!")
+                    for f in faltan_ev: 
+                        st.markdown(f"🚨 **{f}** - PENDIENTE DE PAGO")
+                else: 
+                    st.success(f"👏 ¡Todo el curso cumplió con {ev}!")
         else:
-            st.info("No hay campañas activas registradas.")
+            st.info("No hay campañas registradas aún.")
 
     st.markdown("---")
-    st.link_button("📂 Ver Galería de Boletas", "TU_LINK_DE_DRIVE_AQUI")
+    st.link_button("📂 Ver Galería de Boletas (Drive)", "https://drive.google.com/")
 
 except Exception as e:
-    st.error(f"Configurando... Asegúrate de tener la pestaña 'Nomina' con los nombres. ({e})")
+    st.error(f"Sincronizando... Asegúrate de que la hoja 'Nomina' exista en el Excel. ({e})")
