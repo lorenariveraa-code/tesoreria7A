@@ -36,7 +36,6 @@ if check_password():
         df_pagos = pd.read_csv(url_pagos).fillna("")
         df_nomina = pd.read_csv(url_nomina).fillna("")
         
-        # Detección de columnas
         col_monto = [c for c in df_pagos.columns if 'monto' in c.lower()][0]
         col_tipo = [c for c in df_pagos.columns if 'tipo' in c.lower()][0]
         col_cat = [c for c in df_pagos.columns if 'detalle' in c.lower() or 'evento' in c.lower() or 'categor' in c.lower()][0]
@@ -44,13 +43,9 @@ if check_password():
         
         df_pagos[col_monto] = pd.to_numeric(df_pagos[col_monto], errors='coerce').fillna(0).astype(int)
 
-        # 3. Resumen de Saldo
-        ingresos = df_pagos[df_pagos[col_tipo].str.contains('Ingreso', case=False, na=False)][col_monto].sum()
-        egresos = df_pagos[df_pagos[col_tipo].str.contains('Egreso', case=False, na=False)][col_monto].sum()
-        st.metric("🏦 Saldo Disponible en Caja", f"${(ingresos - egresos):,.0f}")
+        st.metric("🏦 Saldo Disponible en Caja", f"${(df_pagos[df_pagos[col_tipo].str.contains('Ingreso', case=False)][col_monto].sum() - df_pagos[df_pagos[col_tipo].str.contains('Egreso', case=False)][col_monto].sum()):,.0f}")
         st.markdown("---")
 
-        # 4. Pestañas
         t1, t2, t3, t4, t5, tab_mora = st.tabs(["📅 Cuotas", "🛠️ Gastos", "🎉 Eventos", "🤝 Solidaria", "📎 Otros", "🚨 MOROSIDAD"])
 
         def mostrar_datos(palabra, obj_tab):
@@ -64,7 +59,6 @@ if check_password():
         mostrar_datos("Event", t3)
         mostrar_datos("Solidar", t4)
 
-        # --- PESTAÑA DE MOROSIDAD (RECUPERADA) ---
         with tab_mora:
             st.error("### 🚨 ESTADO DE CUMPLIMIENTO POR ALUMNO")
             lista_total = sorted(df_nomina['Nombre'].tolist())
@@ -83,19 +77,25 @@ if check_password():
 
             st.markdown("---")
 
-            # SECCIÓN B: CAMPAÑAS (Pascua, etc.)
-            st.subheader("🎉 Cumplimiento de Campañas y Eventos")
+            # SECCIÓN B: CAMPAÑAS ESPECIFICADAS
+            st.subheader("🎉 Cumplimiento de Campañas")
+            # Filtramos todos los ingresos que NO son cuota de curso pero son eventos
             eventos_df = df_pagos[df_pagos[col_cat].str.contains("Event", case=False, na=False)]
             
             if not eventos_df.empty:
-                nombres_eventos = eventos_df[col_cat].unique()
-                for ev in nombres_eventos:
-                    st.write(f"**Campaña: {ev}**")
-                    pagaron_ev = eventos_df[eventos_df[col_cat] == ev][col_nombre].unique()
-                    faltan_ev = [a for a in lista_total if a not in pagaron_ev]
-                    if faltan_ev:
-                        for f in faltan_ev: st.markdown(f"🚨 **{f}** - PENDIENTE DE PAGO")
-                    else: st.success(f"👏 ¡Todo el curso cumplió con {ev}!")
+                # Obtenemos los nombres específicos de las campañas (ej: 'Pascua', 'Rifa')
+                campanas_activas = eventos_df[col_cat].unique()
+                for campana in campanas_activas:
+                    st.markdown(f"🔍 **Revisando: {campana}**")
+                    pagaron_esta = eventos_df[eventos_df[col_cat] == campana][col_nombre].unique()
+                    faltan_esta = [a for a in lista_total if a not in pagaron_esta]
+                    
+                    if faltan_esta:
+                        for deudor in faltan_esta:
+                            # Aquí es donde especificamos QUÉ campaña debe
+                            st.markdown(f"🚨 **{deudor}** - PENDIENTE DE PAGO (**{campana}**)")
+                    else:
+                        st.success(f"👏 ¡Todo el curso cumplió con la campaña: {campana}!")
             else:
                 st.info("No hay campañas registradas aún.")
 
@@ -103,4 +103,4 @@ if check_password():
         st.link_button("📂 Ver Galería de Boletas (Drive)", "https://drive.google.com/")
 
     except Exception as e:
-        st.error(f"Sincronizando... Asegúrate de que la hoja 'Nomina' exista. ({e})")
+        st.error(f"Sincronizando... ({e})")
