@@ -39,13 +39,14 @@ if check_password():
         col_tipo = [c for c in df_pagos.columns if 'tipo' in c.lower()][0]
         col_cat = [c for c in df_pagos.columns if 'detalle' in c.lower() or 'evento' in c.lower() or 'categor' in c.lower()][0]
         col_nombre = [c for c in df_pagos.columns if 'nombre' in c.lower()][0]
-        
-        # BUSCAMOS LA COLUMNA DE GLOSA (donde dice 'Pascua')
-        # Buscamos una columna que diga "especifique", "glosa" o que NO sea la de categoría principal
-        col_glosa = [c for c in df_pagos.columns if 'especifique' in c.lower() or 'detalle' in c.lower() and c != col_cat]
-        col_glosa = col_glosa[0] if col_glosa else col_cat # Si no hay, usa la categoría
+        col_glosa = [c for c in df_pagos.columns if 'especifique' in c.lower() or ('detalle' in c.lower() and c != col_cat)][0]
 
         df_pagos[col_monto] = pd.to_numeric(df_pagos[col_monto], errors='coerce').fillna(0).astype(int)
+        
+        # Limpieza de nombres y glosas para evitar errores de coincidencia
+        df_pagos[col_nombre] = df_pagos[col_nombre].str.strip()
+        df_nomina['Nombre'] = df_nomina['Nombre'].str.strip()
+        df_pagos[col_glosa] = df_pagos[col_glosa].str.strip().str.capitalize()
 
         st.metric("🏦 Saldo en Caja", f"${(df_pagos[df_pagos[col_tipo].str.contains('Ingreso', case=False)][col_monto].sum() - df_pagos[df_pagos[col_tipo].str.contains('Egreso', case=False)][col_monto].sum()):,.0f}")
         st.markdown("---")
@@ -76,24 +77,29 @@ if check_password():
 
             st.markdown("---")
 
-            # SECCIÓN B: CAMPAÑAS ESPECÍFICAS (CON GLOSA)
+            # SECCIÓN B: CAMPAÑAS (Corregido para que NO falle)
             st.subheader("🎉 Cumplimiento de Campañas")
             ev_df = df_pagos[df_pagos[col_cat].str.contains("Event", case=False, na=False)]
             
             if not ev_df.empty:
-                # Creamos una columna combinada: "Eventos (Pascua)"
-                ev_df['Evento_Detallado'] = ev_df[col_cat] + " (" + ev_df[col_glosa].astype(str) + ")"
-                tipos_eventos = ev_df['Evento_Detallado'].unique()
+                # Obtenemos las glosas únicas (ej: Pascua, Rifa)
+                tipos_eventos = [g for g in ev_df[col_glosa].unique() if g != ""]
                 
                 for ev_nom in tipos_eventos:
-                    st.markdown(f"🔍 **Revisando: {ev_nom}**")
-                    pagaron = ev_df[ev_df['Evento_Detallado'] == ev_nom][col_nombre].unique()
+                    st.markdown(f"🔍 **Campaña: {ev_nom}**")
+                    # Quiénes pagaron ESTA glosa específica
+                    pagaron = ev_df[ev_df[col_glosa] == ev_nom][col_nombre].unique()
+                    
+                    # El cruce con la nómina
                     faltan = [al for al in lista_total if al not in pagaron]
+                    
                     if faltan:
                         for deudor in faltan:
                             st.markdown(f"🚨 **{deudor}** - PENDIENTE (**{ev_nom}**)")
-                    else: st.success(f"👏 Todo el curso cumplió con {ev_nom}!")
-            else: st.info("No hay campañas aún.")
+                    else: 
+                        st.success(f"👏 ¡Todo el curso cumplió con {ev_nom}!")
+            else: 
+                st.info("No hay campañas aún.")
 
         st.link_button("📂 Ver Galería de Boletas", "https://drive.google.com/")
 
