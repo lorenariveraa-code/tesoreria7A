@@ -37,18 +37,20 @@ if check_password():
         df_nomina = pd.read_csv(url_nomina).fillna("")
         df_avisos = pd.read_csv(url_avisos).fillna("")
         
+        # Identificación dinámica de columnas
         col_monto = [c for c in df_pagos.columns if 'monto' in c.lower()][0]
         col_tipo = [c for c in df_pagos.columns if 'tipo' in c.lower()][0]
         col_cat = [c for c in df_pagos.columns if 'detalle' in c.lower() or 'evento' in c.lower() or 'categor' in c.lower()][0]
         col_nombre = [c for c in df_pagos.columns if 'nombre' in c.lower()][0]
         col_glosa = [c for c in df_pagos.columns if 'especifique' in c.lower() or ('detalle' in c.lower() and c != col_cat)][0]
+        col_link = [c for c in df_pagos.columns if 'comprobante' in c.lower() or 'archivo' in c.lower() or 'foto' in c.lower()][0]
 
         df_pagos[col_monto] = pd.to_numeric(df_pagos[col_monto], errors='coerce').fillna(0).astype(int)
         df_pagos[col_nombre] = df_pagos[col_nombre].str.strip()
         df_nomina['Nombre'] = df_nomina['Nombre'].str.strip()
         df_pagos[col_glosa] = df_pagos[col_glosa].str.strip().str.upper()
 
-        # Cabecera
+        # --- CABECERA ---
         ingresos = df_pagos[df_pagos[col_tipo].str.contains('Ingreso', case=False)][col_monto].sum()
         egresos = df_pagos[df_pagos[col_tipo].str.contains('Egreso', case=False)][col_monto].sum()
         st.metric("🏦 Saldo Actual en Caja", f"${(ingresos - egresos):,.0f}")
@@ -60,28 +62,29 @@ if check_password():
         st.markdown("---")
         t1, t2, t3, t4, t5, tab_mora = st.tabs(["📅 Cuotas", "🛠️ GASTOS (TODOS)", "🎉 Eventos", "🤝 Solidaria", "📎 Otros", "🚨 PAGOS"])
 
-        # Función para ingresos por categoría
+        # --- PESTAÑA GASTOS CON LINKS FUNCIONALES ---
+        with t2:
+            mask_egresos = df_pagos[col_tipo].str.contains('Egreso', case=False)
+            if not df_pagos[mask_egresos].empty:
+                st.subheader("📋 Detalle de Dinero Saliente")
+                st.dataframe(
+                    df_pagos[mask_egresos], 
+                    hide_index=True,
+                    column_config={col_link: st.column_config.LinkColumn("Ver Comprobante 📄")}
+                )
+                st.warning(f"**Total Egresado hasta hoy:** ${egresos:,.0f}")
+            else:
+                st.info("No hay egresos registrados.")
+
         def mostrar_ingresos(palabra, obj_tab):
             with obj_tab:
                 mask = (df_pagos[col_cat].str.contains(palabra, case=False, na=False)) & (df_pagos[col_tipo].str.contains('Ingreso', case=False))
                 if not df_pagos[mask].empty: st.dataframe(df_pagos[mask], hide_index=True)
                 else: st.info(f"Sin ingresos registrados")
 
-        # Pestaña de GASTOS (Ahora muestra TODO egreso)
-        with t2:
-            mask_egresos = df_pagos[col_tipo].str.contains('Egreso', case=False)
-            if not df_pagos[mask_egresos].empty:
-                st.subheader("📋 Detalle de Dinero Saliente")
-                st.dataframe(df_pagos[mask_egresos], hide_index=True)
-                st.warning(f"**Total Egresado hasta hoy:** ${egresos:,.0f}")
-            else:
-                st.info("No hay egresos registrados.")
+        mostrar_ingresos("Cuota", t1); mostrar_ingresos("Event", t3); mostrar_ingresos("Solidar", t4); mostrar_ingresos("Otros", t5)
 
-        mostrar_ingresos("Cuota", t1)
-        mostrar_ingresos("Event", t3)
-        mostrar_ingresos("Solidar", t4)
-        mostrar_ingresos("Otros", t5)
-
+        # --- PESTAÑA DE CONTROL DE PAGOS ---
         with tab_mora:
             st.error("### 🚨 CONTROL DE PAGOS")
             with st.expander("ℹ️ ¿Cómo funciona este sistema de cuotas?"):
@@ -113,7 +116,6 @@ if check_password():
             st.markdown("---")
             st.subheader("🎉 Campañas 🐰🥕")
             ev_df = df_pagos[(df_pagos[col_cat].str.contains("Event", case=False, na=False)) & (df_pagos[col_tipo].str.contains('Ingreso', case=False))]
-            
             if not ev_df.empty:
                 campanas_unicas = sorted([g for g in ev_df[col_glosa].unique() if g != ""])
                 for ev_nom in campanas_unicas:
@@ -124,7 +126,10 @@ if check_password():
                         for deudor in faltan: st.markdown(f"🚨 **{deudor}** - PENDIENTE")
                     else: st.success(f"👏 ¡Todos cumplieron!")
 
-        st.link_button("📂 Ver Galería de Boletas", "https://drive.google.com/")
-
-    except Exception as e:
-        st.error(f"Error: {e}")
+        # --- BOTÓN DE GALERÍA INTELIGENTE ---
+        # Intenta extraer la carpeta base de los links existentes en el Excel
+        links_existentes = df_pagos[df_pagos[col_link].str.contains("drive.google.com", na=False)][col_link]
+        if not links_existentes.empty:
+            # Si hay links, el botón usará la carpeta de tus comprobantes
+            ejemplo_link = links_existentes.iloc[0]
+            link
