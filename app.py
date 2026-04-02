@@ -47,18 +47,18 @@ if check_password():
         col_glosa = [c for c in df_pagos.columns if 'especifique' in c.lower() or ('detalle' in c.lower() and c != col_cat)][0]
         col_link = [c for c in df_pagos.columns if 'comprobante' in c.lower() or 'archivo' in c.lower() or 'foto' in c.lower()][0]
 
-        # Limpieza
+        # Limpieza y Formato
         df_pagos[col_monto] = pd.to_numeric(df_pagos[col_monto], errors='coerce').fillna(0).astype(int)
         df_pagos[col_nombre] = df_pagos[col_nombre].str.strip()
         df_nomina['Nombre'] = df_nomina['Nombre'].str.strip()
         df_pagos[col_glosa] = df_pagos[col_glosa].str.strip().str.upper()
 
-        # Cabecera - Saldo
+        # Cabecera - Saldo Actual
         ingresos_tot = df_pagos[df_pagos[col_tipo].str.contains('Ingreso', case=False)][col_monto].sum()
         egresos_tot = df_pagos[df_pagos[col_tipo].str.contains('Egreso', case=False)][col_monto].sum()
         st.metric("🏦 Saldo Actual en Caja", f"${(ingresos_tot - egresos_tot):,.0f}")
 
-        # Cabecera - Avisos
+        # Cabecera - Avisos de la Directiva
         if not df_avisos.empty:
             mensaje = df_avisos.iloc[0, 0]
             st.info(f"📢 **INFORMACIÓN IMPORTANTE:** \n\n {mensaje}")
@@ -66,19 +66,19 @@ if check_password():
         st.markdown("---")
         t1, t2, t3, t4, t5, tab_mora = st.tabs(["📅 Cuotas", "🛠️ GASTOS", "🎉 Eventos", "🤝 Solidaria", "📎 Otros", "🚨 PAGOS"])
 
-        # Pestaña Gastos (Links activos)
+        # Pestaña Gastos (Aquí los links ahora son cliqueables)
         with t2:
             mask_eg = df_pagos[col_tipo].str.contains('Egreso', case=False)
             if not df_pagos[mask_eg].empty:
-                st.subheader("📋 Detalle de Gastos")
+                st.subheader("📋 Detalle de Gastos y Egresos")
                 st.dataframe(
                     df_pagos[mask_eg], 
                     hide_index=True,
                     column_config={col_link: st.column_config.LinkColumn("Archivo 📄")}
                 )
-                st.warning(f"**Total Gastado:** ${egresos_tot:,.0f}")
+                st.warning(f"**Total Gastado a la fecha:** ${egresos_tot:,.0f}")
             else:
-                st.info("Sin gastos registrados.")
+                st.info("No hay egresos registrados todavía.")
 
         def mostrar_ing(palabra, obj_tab):
             with obj_tab:
@@ -88,15 +88,17 @@ if check_password():
 
         mostrar_ing("Cuota", t1); mostrar_ing("Event", t3); mostrar_ing("Solidar", t4); mostrar_ing("Otros", t5)
 
+        # Panel de Control de Pagos (Morosidad)
         with tab_mora:
             st.error("### 🚨 CONTROL DE PAGOS")
-            with st.expander("ℹ️ ¿Cómo funciona el sistema?"):
-                st.write("Cuota anual $30.000 (10 x $3.000). Vencen el día 5 de cada mes.")
+            with st.expander("ℹ️ ¿Cómo funciona el sistema de cuotas?"):
+                st.write("Cuota anual de $30.000 dividida en 10 meses ($3.000 c/u). Vencen el día 5 de cada mes (Marzo a Diciembre).")
 
             h = datetime.now()
+            # Cálculo de meses vencidos (Marzo es mes 3)
             mv = (h.month - 3) + (1 if h.day >= 5 else 0) if 3 <= h.month <= 12 else (10 if h.month > 12 else 0)
             exigible = mv * 3000
-            st.info(f"📅 **Monto exigible hoy:** ${exigible:,.0f} ({mv} cuotas)")
+            st.info(f"📅 **Monto exigible a hoy:** ${exigible:,.0f} ({mv} cuotas acumuladas)")
             
             lista = sorted(df_nomina['Nombre'].tolist())
             pagos = df_pagos[(df_pagos[col_cat].str.contains("Cuota", case=False)) & (df_pagos[col_tipo].str.contains('Ingreso', case=False))].groupby(col_nombre)[col_monto].sum()
@@ -110,7 +112,7 @@ if check_password():
                 else: st.markdown(f"✅ **{a}** - AL DÍA")
 
             st.markdown("---")
-            st.subheader("🎉 Campañas 🐰🥕")
+            st.subheader("🎉 Campañas Especiales 🐰🥕")
             ev = df_pagos[(df_pagos[col_cat].str.contains("Event", case=False, na=False)) & (df_pagos[col_tipo].str.contains('Ingreso', case=False))]
             if not ev.empty:
                 for ev_nom in sorted([g for g in ev[col_glosa].unique() if g != ""]):
@@ -119,9 +121,10 @@ if check_password():
                     faltan = [al for al in lista if al not in pagaron]
                     if faltan:
                         for deudor in faltan: st.markdown(f"🚨 **{deudor}** - PENDIENTE")
-                    else: st.success(f"👏 ¡Todo el curso pagó {ev_nom}!")
+                    else: st.success(f"👏 ¡Todo el curso cumplió con {ev_nom}!")
 
-        st.link_button("📂 Ver Galería de Boletas", "https://drive.google.com/")
+        # Botón de Galería con tu link directo
+        st.link_button("📂 Ver Galería de Boletas", "https://drive.google.com/drive/folders/1eT5xQrRxuSHGs8r7wlNSPJXXGsPFUuE9DpSMO4F0ZfcEsDfGOOtLI5ewUAmKGkhNAnWDG_3D?usp=sharing")
 
     except Exception as e:
-        st.error(f"Error técnico: {e}")
+        st.error(f"Error técnico al cargar los datos: {e}")
