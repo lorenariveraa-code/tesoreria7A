@@ -44,8 +44,6 @@ if check_password():
         col_glosa = [c for c in df_pagos.columns if 'especifique' in c.lower() or ('detalle' in c.lower() and c != col_cat)][0]
 
         df_pagos[col_monto] = pd.to_numeric(df_pagos[col_monto], errors='coerce').fillna(0).astype(int)
-        
-        # Limpieza de datos
         df_pagos[col_nombre] = df_pagos[col_nombre].str.strip()
         df_nomina['Nombre'] = df_nomina['Nombre'].str.strip()
         df_pagos[col_glosa] = df_pagos[col_glosa].str.strip().str.upper()
@@ -60,27 +58,35 @@ if check_password():
             st.info(f"📢 **INFORMACIÓN IMPORTANTE:** \n\n {mensaje_actual}")
 
         st.markdown("---")
-        t1, t2, t3, t4, t5, tab_mora = st.tabs(["📅 Cuotas", "🛠️ Gastos", "🎉 Eventos", "🤝 Solidaria", "📎 Otros", "🚨 PAGOS"])
+        t1, t2, t3, t4, t5, tab_mora = st.tabs(["📅 Cuotas", "🛠️ GASTOS (TODOS)", "🎉 Eventos", "🤝 Solidaria", "📎 Otros", "🚨 PAGOS"])
 
-        def mostrar_datos(palabra, obj_tab):
+        # Función para ingresos por categoría
+        def mostrar_ingresos(palabra, obj_tab):
             with obj_tab:
-                mask = df_pagos[col_cat].str.contains(palabra, case=False, na=False)
+                mask = (df_pagos[col_cat].str.contains(palabra, case=False, na=False)) & (df_pagos[col_tipo].str.contains('Ingreso', case=False))
                 if not df_pagos[mask].empty: st.dataframe(df_pagos[mask], hide_index=True)
-                else: st.info(f"Sin registros")
+                else: st.info(f"Sin ingresos registrados")
 
-        mostrar_datos("Cuota", t1); mostrar_datos("Operat", t2); mostrar_datos("Event", t3); mostrar_datos("Solidar", t4); mostrar_datos("Otros", t5)
+        # Pestaña de GASTOS (Ahora muestra TODO egreso)
+        with t2:
+            mask_egresos = df_pagos[col_tipo].str.contains('Egreso', case=False)
+            if not df_pagos[mask_egresos].empty:
+                st.subheader("📋 Detalle de Dinero Saliente")
+                st.dataframe(df_pagos[mask_egresos], hide_index=True)
+                st.warning(f"**Total Egresado hasta hoy:** ${egresos:,.0f}")
+            else:
+                st.info("No hay egresos registrados.")
+
+        mostrar_ingresos("Cuota", t1)
+        mostrar_ingresos("Event", t3)
+        mostrar_ingresos("Solidar", t4)
+        mostrar_ingresos("Otros", t5)
 
         with tab_mora:
             st.error("### 🚨 CONTROL DE PAGOS")
-            
-            # NOTA EXPLICATIVA RECUPERADA
             with st.expander("ℹ️ ¿Cómo funciona este sistema de cuotas?"):
-                st.write("""
-                La cuota anual de **$30.000** se divide en **10 cuotas mensuales de $3.000** (de marzo a diciembre).
-                Cada cuota vence el **día 5 de cada mes**. El sistema calcula automáticamente el monto que debería estar pagado según la fecha de hoy.
-                """)
+                st.write("Cuota anual de $30.000 (10 cuotas de $3.000, vencen el día 5 de cada mes).")
 
-            # Cálculo devengo
             hoy = datetime.now()
             mes_actual = hoy.month
             dia_actual = hoy.day
@@ -94,7 +100,7 @@ if check_password():
             st.info(f"📅 **Monto exigible a la fecha:** ${deuda_exigible:,.0f} ({meses_vencidos} cuotas)")
             
             lista_total = sorted(df_nomina['Nombre'].tolist())
-            resumen_cuota = df_pagos[df_pagos[col_cat].str.contains("Cuota", case=False)].groupby(col_nombre)[col_monto].sum()
+            resumen_cuota = df_pagos[(df_pagos[col_cat].str.contains("Cuota", case=False)) & (df_pagos[col_tipo].str.contains('Ingreso', case=False))].groupby(col_nombre)[col_monto].sum()
 
             for a in lista_total:
                 p = resumen_cuota.get(a, 0)
@@ -106,7 +112,7 @@ if check_password():
 
             st.markdown("---")
             st.subheader("🎉 Campañas 🐰🥕")
-            ev_df = df_pagos[df_pagos[col_cat].str.contains("Event", case=False, na=False)]
+            ev_df = df_pagos[(df_pagos[col_cat].str.contains("Event", case=False, na=False)) & (df_pagos[col_tipo].str.contains('Ingreso', case=False))]
             
             if not ev_df.empty:
                 campanas_unicas = sorted([g for g in ev_df[col_glosa].unique() if g != ""])
